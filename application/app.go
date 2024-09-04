@@ -4,18 +4,22 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+
+	"github.com/go-redis/redis"
 )
 
+// this struct is to include required dependents for our application.
 type App struct {
 	router http.Handler
+	rdb    *redis.Client
 }
 
 func New() *App {
 
 	app := &App{
 		router: loadRoutes(),
+		rdb:    redis.NewClient(&redis.Options{}),
 	}
-	fmt.Printf("this is type of app %T", app)
 	return app
 }
 
@@ -25,12 +29,27 @@ func (a *App) Start(ctx context.Context) error {
 		Addr:    ":3000",
 		Handler: a.router,
 	}
-	fmt.Printf("this is context pass value %s", ctx.Value("mykey"))
 
-	err := server.ListenAndServe()
-
+	err := a.rdb.Ping().Err()
 	if err != nil {
-		return fmt.Errorf("Failed to start the server %w", err)
+		return fmt.Errorf("failed to start the redis : %w", err)
+	}
+	fmt.Println("Starting Server")
+
+	ch := make(chan error, 1) // this channel is provide communication between goroutines below function
+	go func() {
+		err = server.ListenAndServe()
+		if err != nil {
+			ch <- fmt.Errorf("failed to start the server: %w", err)
+		}
+		close(ch) // closing the channel if the server is shitdown due to client offline or someother reason
+	}()
+
+	select {
+	case err = <-ch:
+		return err
+	case <-ctx.Done():
+		return server.Shutdown(ctx)
 	}
 
 	return nil

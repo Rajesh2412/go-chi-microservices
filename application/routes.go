@@ -33,7 +33,7 @@ func loadOrderRoutes(router chi.Router) {
 	orderHandler := &handler.Order{}
 
 	router.Get("/", orderHandler.Create)
-	router.Get("/{id}", orderHandler.GetById)
+	router.Post("/{id}", orderHandler.GetById)
 	router.Put("/{id}", orderHandler.UpdateById)
 	router.Delete("/{id}", orderHandler.DeleteById)
 
