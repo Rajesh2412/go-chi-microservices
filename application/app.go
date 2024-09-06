@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/go-redis/redis"
 )
@@ -26,7 +27,7 @@ func New() *App {
 func (a *App) Start(ctx context.Context) error {
 
 	server := &http.Server{
-		Addr:    ":3000",
+		Addr:    ":8080",
 		Handler: a.router,
 	}
 
@@ -34,6 +35,12 @@ func (a *App) Start(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to start the redis : %w", err)
 	}
+	//this is to close the redis connection
+	defer func() {
+		if err := a.rdb.Close(); err != nil {
+			fmt.Println("failed to close redis connection %w", err)
+		}
+	}()
 	fmt.Println("Starting Server")
 
 	ch := make(chan error, 1) // this channel is provide communication between goroutines below function
@@ -49,9 +56,11 @@ func (a *App) Start(ctx context.Context) error {
 	case err = <-ch:
 		return err
 	case <-ctx.Done():
-		return server.Shutdown(ctx)
-	}
+		timeout, cancel := context.WithTimeout(context.Background(), time.Second*10)
 
-	return nil
+		defer cancel()
+
+		return server.Shutdown(timeout)
+	}
 
 }
